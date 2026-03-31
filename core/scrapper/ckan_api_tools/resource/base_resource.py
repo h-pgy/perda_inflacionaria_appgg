@@ -1,10 +1,10 @@
 import requests
 from typing import Any, Optional
-from .checks import test_status_show
+from ..checks import test_status_show
 from core.utils.path import prepare_path
 from core.utils.download import stream_download
 
-class CKANResourceDownloader:
+class CkanResource:
     def __init__(self, base_url: str, resource_id: str):
         self.base_url: str = base_url.rstrip("/")
         self.resource_id: str = resource_id
