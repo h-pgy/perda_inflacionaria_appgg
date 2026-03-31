@@ -1,0 +1,8 @@
+import os
+
+def prepare_path(folder_path: str, file_name: str) -> str:
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+    
+    full_path = os.path.join(folder_path, file_name)
+    return os.path.abspath(full_path)
