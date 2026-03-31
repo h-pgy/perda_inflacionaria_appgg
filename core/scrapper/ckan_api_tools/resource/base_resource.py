@@ -3,12 +3,14 @@ from typing import Any, Optional
 from ..checks import test_status_show
 from core.utils.path import prepare_path
 from core.utils.download import stream_download
+from datetime import datetime
 
 class CkanResource:
-    def __init__(self, base_url: str, resource_id: str):
+    def __init__(self, base_url: str, resource_id: str, check_active: bool = True):
         self.base_url: str = base_url.rstrip("/")
         self.resource_id: str = resource_id
         self.resource_url: str = self.build_resource_url()
+        self.check_active: bool = check_active
         self.__metadata: Optional[dict[str, Any]] = None
         
         if not test_status_show(self.base_url):
@@ -46,6 +48,18 @@ class CkanResource:
             raise ValueError(f"O atributo 'format' está vazio ou não existe nos metadados do recurso {self.resource_id}.")
             
         return resource_format.lower().strip()
+    
+
+    @property
+    def state(self) -> str:
+        resource_state: Optional[str] = self.metadata.get("state")
+        if not resource_state:
+            raise ValueError(f"O atributo 'state' está ausente nos metadados do recurso {self.resource_id}.")
+        return resource_state.lower().strip()
+
+    @property
+    def is_active(self) -> bool:
+        return self.state == "active"
 
     
     @property
@@ -59,9 +73,36 @@ class CkanResource:
             raise ValueError(f"A URL de download não termina com o formato esperado: {self.format}")
             
         return url
+    
+    @property
+    def last_modified(self) -> datetime:
+        last_mod_str: Optional[str] = self.metadata.get("last_modified")
+        
+        if not last_mod_str:
+            raise ValueError(f"O atributo 'last_modified' está ausente nos metadados do recurso {self.resource_id}.")
+            
+        try:
+            return datetime.fromisoformat(last_mod_str)
+        except ValueError as e:
+            raise ValueError(f"O formato da data '{last_mod_str}' é incompatível com ISO 8601.") from e
 
+    @property
+    def created_at(self) -> datetime:
+        created_str: Optional[str] = self.metadata.get("created")
+        
+        if not created_str:
+            raise ValueError(f"O atributo 'created' está ausente nos metadados do recurso {self.resource_id}.")
+            
+        try:
+            return datetime.fromisoformat(created_str)
+        except ValueError as e:
+            raise ValueError(f"O formato da data '{created_str}' é incompatível com ISO 8601.") from e
 
     def download(self, file_name: str, folder_path: str = ".") -> str:
+
+        if self.check_active and not self.is_active:
+            raise RuntimeError(f"Download bloqueado: o recurso {self.resource_id} não está ativo (state: {self.state}).")
+
         if not file_name.lower().endswith(f".{self.format}"):
             raise ValueError(f"O nome do arquivo '{file_name}' deve terminar com a extensão '.{self.format}' correspondente ao recurso.")
         
@@ -70,5 +111,6 @@ class CkanResource:
         stream_download(self.download_url, full_path)
         
         return full_path
+    
 
     
