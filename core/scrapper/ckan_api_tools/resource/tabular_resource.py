@@ -42,15 +42,32 @@ class TabularResource(CkanResource):
         return preseted_encoding
     
     def __read_tabular_data(self) -> pd.DataFrame:
-        if self.format == "csv":
-            self.__solve_encoding()
+        if self.format != "csv":
+            return pd.read_excel(self.fpath, **self.read_kwargs)
+
+        self.__solve_encoding()
+        
+        # Lista de encodings para tentativa em ordem de prioridade
+        encodings_to_try = [
+            self.read_kwargs.get('encoding'), 
+            'cp1252', 
+            'latin1'
+        ]
+
+        for encoding in encodings_to_try:
+            if not encoding:
+                continue
+                
+            self.read_kwargs['encoding'] = encoding
             try:
                 return pd.read_csv(self.fpath, **self.read_kwargs)
-            except UnicodeDecodeError:
-                # coloca o encoding místico cp1252 para tentar resolver casos problemáticos
-                self.read_kwargs['encoding'] = 'cp1252'
-                return pd.read_csv(self.fpath, **self.read_kwargs)
-        return pd.read_excel(self.fpath, **self.read_kwargs)
+            except (UnicodeDecodeError, TypeError) as e:
+                last_error = e 
+                continue
+
+        # Se chegar aqui, nenhuma tentativa funcionou
+        raise last_error
+        
     
     @property
     def data(self) -> pd.DataFrame:
