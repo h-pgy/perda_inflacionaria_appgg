@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 
-def extract_date_from_ptbr_description(description: str) -> datetime:
+def extract_date_from_ptbr_description(description: str, raise_error:bool=False) -> datetime|None:
     months_map: dict[str, int] = {
         "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4,
         "maio": 5, "junho": 6, "julho": 7, "agosto": 8,
@@ -12,7 +12,9 @@ def extract_date_from_ptbr_description(description: str) -> datetime:
     match = re.search(pattern, description.lower())
     
     if not match:
-        raise ValueError(f"Não foi possível encontrar uma data no formato 'mês de ano' na descrição: {description}")
+        if raise_error:
+            raise ValueError(f"Não foi possível encontrar uma data no formato 'mês de ano' na descrição: {description}")
+        return None
         
     month_str, year_str = match.groups()
     
