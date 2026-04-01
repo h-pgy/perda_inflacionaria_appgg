@@ -1,18 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
-from pydantic import BaseModel, Field
 from typing import Any, Optional
+from .resource_mdata_model import ResourceMdataModel as ResourceModel
 
-class ResourceModel(BaseModel):
-    id: str 
-    title: str
-    format: str
-    description: Optional[str] = None
 
-    class Config:
-        populate_by_name = True
 
-class CkanScraper:
+class DatasetPageScraper:
     def __init__(self, dataset_url: str):
         self.dataset_url: str = dataset_url
         self.__html: Optional[str] = None
@@ -45,7 +38,7 @@ class CkanScraper:
         if not resource_id:
             raise ValueError(f"Item da lista não possui 'data-id'. HTML interno: {item.decode_contents()}")
         return resource_id
-
+    
     def __extract_title(self, item: Any) -> str:
         heading_anchor = item.find("a", class_="heading")
         if not heading_anchor or not heading_anchor.get("title"):
@@ -77,9 +70,9 @@ class CkanScraper:
             description=self.__extract_description(item)
         )
 
-    def run_pipeline(self) -> list[dict[str, Any]]:
+    def run_pipeline(self) -> list[ResourceModel]:
         items = self.get_resource_list_items()
-        return [self.parse_resource_item(item).model_dump() for item in items]
+        return [self.parse_resource_item(item) for item in items]
 
-    def __call__(self) -> list[dict[str, Any]]:
+    def __call__(self) -> list[ResourceModel]:
         return self.run_pipeline()
