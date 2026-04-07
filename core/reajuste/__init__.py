@@ -1,0 +1,1 @@
+from .calculadora_inflacao import CalculadoraFatorInflacao
