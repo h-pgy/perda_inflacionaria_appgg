@@ -37,15 +37,34 @@ def sidebar_factory():
         Como etapa final de processamento todas as perdas nominais identificadas ao longo dos anos foram atualizadas para valores reais presentes utilizando novamente o índice IPC FIPE. Esse tratamento permite uma análise financeira precisa do impacto acumulado demonstrando quanto cada servidor deixou de receber em termos de poder de compra atualizado. O resultado final permite agrupamentos e análises que expõem o tamanho do prejuízo financeiro individual e coletivo enfrentado pela carreira ao longo de sua existência.
         """)
 
-def header_factory(df):
+def call_to_action_factory(df_raw):
+    total_historico = df_raw["perda_inflacionaria_atualizada"].sum()
+
     st.title("Análise de Perda Inflacionária - Carreira APPGG")
-    st.write("Este aplicativo apresenta o impacto financeiro acumulado causado pela inflação na remuneração dos Analistas de Políticas Públicas e Gestão Governamental. Através do cruzamento de dados históricos de lotação e tabelas de vencimentos quantificamos a defasagem em relação ao poder de compra original da carreira estabelecido em 2016.")
+    
+    with st.container(border=True):
+        st.markdown(f"""
+        Desde as primeiras nomeações da carreira de APPGG em junho de 2016, a inflação acumulada medida pelo IPC-FIPE atingiu a marca de **57%**. 
+        Contudo, esse percentual isolado não traduz o real impacto no bolso do servidor. Ao longo de uma década sem reajustes que 
+        recompusessem integralmente o poder de compra, a perda salarial materializou-se mês a mês, em cada vencimento base recebido, 
+        como a diferença silenciosa entre a remuneração devida e a efetivamente paga. 
+        
+        Este aplicativo foi desenvolvido para dar visibilidade a esse prejuízo histórico, permitindo visualizar a dimensão 
+        da perda tanto sob a ótica coletiva da carreira quanto sob a perspectiva individual de cada servidor.
+        """)
+        
+        st.metric("Perda Coletiva Total Acumulada (Desde 2016)", f"R$ {total_historico:,.2f}")
+        
+        st.subheader("E você, quer saber quanto deixou de receber?")
+
+def slider_factory(df):
+    
     
     anos = sorted(df["ano_referencia"].unique())
     ano_min, ano_max = int(min(anos)), int(max(anos))
     
     range_anos = st.slider(
-        "Selecione o intervalo de anos para filtrar todos os gráficos e dados",
+        "Selecione o intervalo de anos para filtrar os gráficos e dados abaixo",
         min_value=ano_min,
         max_value=ano_max,
         value=(ano_min, ano_max)
@@ -55,9 +74,8 @@ def header_factory(df):
     return df_filtrado
 
 def individual_selector_factory(df):
-    st.divider()
     nomes = sorted(df["nome"].unique())
-    nome_selecionado = st.selectbox("Selecione o servidor para análise individual comparativa", nomes)
+    nome_selecionado = st.selectbox("Busque seu nome para análise individual comparativa", nomes)
     return df[df["nome"] == nome_selecionado], nome_selecionado
 
 def dashboard_columns_factory(df_carreira, df_individuo, nome_servidor):
@@ -66,7 +84,7 @@ def dashboard_columns_factory(df_carreira, df_individuo, nome_servidor):
     with col1:
         st.subheader("Visão Geral da Carreira")
         perda_total_carreira = df_carreira["perda_inflacionaria_atualizada"].sum()
-        st.metric("Perda Total Acumulada (Carreira)", f"R$ {perda_total_carreira:,.2f}")
+        st.metric("Perda Total no Período Selecionado", f"R$ {perda_total_carreira:,.2f}")
         
         evolucao_carreira = df_carreira.groupby("data_referencia")["perda_inflacionaria_atualizada"].sum().reset_index().sort_values("data_referencia")
         evolucao_carreira["perda_acumulada"] = evolucao_carreira["perda_inflacionaria_atualizada"].cumsum()
@@ -75,15 +93,15 @@ def dashboard_columns_factory(df_carreira, df_individuo, nome_servidor):
             evolucao_carreira, 
             x="data_referencia", 
             y="perda_acumulada",
-            title="Evolução da Perda Acumulada - Toda a Carreira",
-            labels={"perda_acumulada": "Soma Acumulada (R$)", "data_referencia": "Tempo"}
+            title="Evolução da Perda Acumulada - Carreira",
+            labels={"perda_acumulada": "Soma Acumulada (R$)", "data_referencia": "Mês de Referência"}
         )
-        st.plotly_chart(fig_carreira, use_container_width=True)
+        st.plotly_chart(fig_carreira, width='content')
 
     with col2:
         st.subheader(f"Visão Individual: {nome_servidor}")
         perda_total_ind = df_individuo["perda_inflacionaria_atualizada"].sum()
-        st.metric(f"Perda Total Acumulada ({nome_servidor})", f"R$ {perda_total_ind:,.2f}")
+        st.metric(f"Sua Perda Total no Período", f"R$ {perda_total_ind:,.2f}")
         
         df_individuo_sorted = df_individuo.sort_values("data_referencia")
         df_individuo_sorted["perda_acumulada_ind"] = df_individuo_sorted["perda_inflacionaria_atualizada"].cumsum()
@@ -93,41 +111,53 @@ def dashboard_columns_factory(df_carreira, df_individuo, nome_servidor):
             x="data_referencia", 
             y="perda_acumulada_ind",
             title=f"Evolução da Perda Acumulada - {nome_servidor}",
-            labels={"perda_acumulada_ind": "Soma Acumulada (R$)", "data_referencia": "Tempo"}
+            labels={"perda_acumulada_ind": "Soma Acumulada (R$)", "data_referencia": "Mês de Referência"}
         )
-        st.plotly_chart(fig_individual, use_container_width=True)
+        st.plotly_chart(fig_individual, width='content')
 
 def data_download_factory(df):
     st.divider()
-    with st.expander("Acessar Microdados e Exportação"):
-        st.write("Abaixo estão listados os microdados filtrados conforme o intervalo de anos selecionado no slider principal.")
-        st.dataframe(df.sort_values(by=["data_referencia", "nome"], ascending=[False, True]), use_container_width=True)
+    with st.expander("Acessar Microdados"):
+        st.write("Dados filtrados conforme o intervalo de anos selecionado:")
+        st.dataframe(df.sort_values(by=["data_referencia", "nome"], ascending=[False, True]), width='content')
         
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Dados Filtrados')
         processed_data = output.getvalue()
         
-        st.download_button(
-            label="Baixar dados filtrados em Excel",
-            data=processed_data,
-            file_name="microdados_appgg_filtrados.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+    st.download_button(
+        label="Baixar Planilha Excel (.xlsx)",
+        data=processed_data,
+        file_name="microdados_perda_appgg.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 def main():
     st.set_page_config(page_title="Dashboard APPGG - Perda Inflacionária", layout="wide")
     
     df_raw = load_data()
+    
     sidebar_factory()
-    df_filtrado = header_factory(df_raw)
+    
+    # Nova chamada do container de introdução antes do slider
+    call_to_action_factory(df_raw)
+    
+    # Slider e filtro global
+    df_filtrado = slider_factory(df_raw)
     
     if not df_filtrado.empty:
-        df_individuo, nome_servidor = individual_selector_factory(df_filtrado)
-        dashboard_columns_factory(df_filtrado, df_individuo, nome_servidor)
+        # Seletor individual
+        df_individuo, nome_servidor = individual_selector_factory(df_raw) # Busca no total para garantir histórico completo se desejado, mas vamos aplicar o filtro de data no dashboard
+        
+        # Ajustamos o df_individuo para respeitar o filtro de anos do slider
+        df_individuo_filtrado = df_individuo[df_individuo["ano_referencia"].isin(df_filtrado["ano_referencia"].unique())]
+        
+        dashboard_columns_factory(df_filtrado, df_individuo_filtrado, nome_servidor)
+        
         data_download_factory(df_filtrado)
     else:
-        st.warning("Nenhum dado encontrado para o intervalo selecionado.")
+        st.warning("Selecione um intervalo de anos válido.")
 
 if __name__ == "__main__":
     main()
