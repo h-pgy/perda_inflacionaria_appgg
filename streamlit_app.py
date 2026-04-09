@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import io
 
 def load_data():
     df = pd.read_csv("microdados_perda_inflacionaria.csv", sep=";", decimal=",")
@@ -13,10 +14,17 @@ def sidebar_factory():
     
     st.sidebar.divider()
     
+    st.sidebar.subheader("Metodologia")
+    
     st.sidebar.write("""
     A metodologia baseia-se no cruzamento de dados históricos do Portal de Dados Abertos com as tabelas 
     vencimentais da carreira, corrigindo os valores originais de 2016 pelo IPC-FIPE para calcular a defasagem real.
     """)
+    
+    st.sidebar.link_button(
+        "Ver Notebook de Cálculo (GitHub)", 
+        "https://github.com/h-pgy/perda_inflacionaria_appgg/blob/main/calculo_perda_inflacionaria.ipynb"
+    )
     
     with st.sidebar.expander("Ver detalhes da metodologia"):
         st.write("""
@@ -31,83 +39,95 @@ def sidebar_factory():
 
 def header_factory(df):
     st.title("Análise de Perda Inflacionária - Carreira APPGG")
-    
     st.write("Este aplicativo apresenta o impacto financeiro acumulado causado pela inflação na remuneração dos Analistas de Políticas Públicas e Gestão Governamental. Através do cruzamento de dados históricos de lotação e tabelas de vencimentos quantificamos a defasagem em relação ao poder de compra original da carreira estabelecido em 2016.")
-
+    
     anos = sorted(df["ano_referencia"].unique())
     ano_min, ano_max = int(min(anos)), int(max(anos))
     
     range_anos = st.slider(
-        "Selecione o intervalo de anos para a visão geral",
+        "Selecione o intervalo de anos para filtrar todos os gráficos e dados",
         min_value=ano_min,
         max_value=ano_max,
         value=(ano_min, ano_max)
     )
     
-    return df[(df["ano_referencia"] >= range_anos[0]) & (df["ano_referencia"] <= range_anos[1])]
+    df_filtrado = df[(df["ano_referencia"] >= range_anos[0]) & (df["ano_referencia"] <= range_anos[1])]
+    return df_filtrado
 
-def metrics_factory(df):
-    col1, col2, col3 = st.columns(3)
-    perda_total = df["perda_inflacionaria_atualizada"].sum()
-    media_perda = df["perda_inflacionaria_atualizada"].mean()
-    total_servidores = df["rf"].nunique()
-    
-    col1.metric("Perda Total Acumulada", f"R$ {perda_total:,.2f}")
-    col2.metric("Média de Perda Mensal por Servidor", f"R$ {media_perda:,.2f}")
-    col3.metric("Total de Servidores no Período", total_servidores)
-
-def charts_factory(df):
-    st.subheader("Evolução da Perda Acumulada no Tempo (Geral)")
-    
-    evolucao_mensal = df.groupby("data_referencia")["perda_inflacionaria_atualizada"].sum().reset_index()
-    evolucao_mensal = evolucao_mensal.sort_values("data_referencia")
-    evolucao_mensal["perda_acumulada"] = evolucao_mensal["perda_inflacionaria_atualizada"].cumsum()
-    
-    fig_linha = px.line(
-        evolucao_mensal, 
-        x="data_referencia", 
-        y="perda_acumulada", 
-        labels={"perda_acumulada": "Perda Acumulada (R$)", "data_referencia": "Mês"},
-        title="Soma da Perda Acumulada de todos os APPGGs Ativos"
-    )
-    st.plotly_chart(fig_linha, use_container_width=True)
-
-def individual_analysis_factory(df_total):
+def individual_selector_factory(df):
     st.divider()
-    st.subheader("Consulta por Servidor")
-    nomes = sorted(df_total["nome"].unique())
-    nome_selecionado = st.selectbox("Selecione o nome para análise individual", nomes)
+    nomes = sorted(df["nome"].unique())
+    nome_selecionado = st.selectbox("Selecione o servidor para análise individual comparativa", nomes)
+    return df[df["nome"] == nome_selecionado], nome_selecionado
+
+def dashboard_columns_factory(df_carreira, df_individuo, nome_servidor):
+    col1, col2 = st.columns(2)
     
-    df_individuo = df_total[df_total["nome"] == nome_selecionado].sort_values("data_referencia")
-    
-    perda_total_ind = df_individuo["perda_inflacionaria_atualizada"].sum()
-    st.metric(f"Perda Total Acumulada - {nome_selecionado}", f"R$ {perda_total_ind:,.2f}")
-    
-    df_individuo["perda_acumulada_ind"] = df_individuo["perda_inflacionaria_atualizada"].cumsum()
-    
-    fig_ind = px.line(
-        df_individuo, 
-        x="data_referencia", 
-        y="perda_acumulada_ind", 
-        labels={"perda_acumulada_ind": "Perda Acumulada (R$)", "data_referencia": "Data"},
-        title=f"Curva de Perda Acumulada - {nome_selecionado}"
-    )
-    st.plotly_chart(fig_ind, use_container_width=True)
+    with col1:
+        st.subheader("Visão Geral da Carreira")
+        perda_total_carreira = df_carreira["perda_inflacionaria_atualizada"].sum()
+        st.metric("Perda Total Acumulada (Carreira)", f"R$ {perda_total_carreira:,.2f}")
+        
+        evolucao_carreira = df_carreira.groupby("data_referencia")["perda_inflacionaria_atualizada"].sum().reset_index().sort_values("data_referencia")
+        evolucao_carreira["perda_acumulada"] = evolucao_carreira["perda_inflacionaria_atualizada"].cumsum()
+        
+        fig_carreira = px.line(
+            evolucao_carreira, 
+            x="data_referencia", 
+            y="perda_acumulada",
+            title="Evolução da Perda Acumulada - Toda a Carreira",
+            labels={"perda_acumulada": "Soma Acumulada (R$)", "data_referencia": "Tempo"}
+        )
+        st.plotly_chart(fig_carreira, use_container_width=True)
+
+    with col2:
+        st.subheader(f"Visão Individual: {nome_servidor}")
+        perda_total_ind = df_individuo["perda_inflacionaria_atualizada"].sum()
+        st.metric(f"Perda Total Acumulada ({nome_servidor})", f"R$ {perda_total_ind:,.2f}")
+        
+        df_individuo_sorted = df_individuo.sort_values("data_referencia")
+        df_individuo_sorted["perda_acumulada_ind"] = df_individuo_sorted["perda_inflacionaria_atualizada"].cumsum()
+        
+        fig_individual = px.line(
+            df_individuo_sorted, 
+            x="data_referencia", 
+            y="perda_acumulada_ind",
+            title=f"Evolução da Perda Acumulada - {nome_servidor}",
+            labels={"perda_acumulada_ind": "Soma Acumulada (R$)", "data_referencia": "Tempo"}
+        )
+        st.plotly_chart(fig_individual, use_container_width=True)
+
+def data_download_factory(df):
+    st.divider()
+    with st.expander("Acessar Microdados e Exportação"):
+        st.write("Abaixo estão listados os microdados filtrados conforme o intervalo de anos selecionado no slider principal.")
+        st.dataframe(df.sort_values(by=["data_referencia", "nome"], ascending=[False, True]), use_container_width=True)
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Dados Filtrados')
+        processed_data = output.getvalue()
+        
+        st.download_button(
+            label="Baixar dados filtrados em Excel",
+            data=processed_data,
+            file_name="microdados_appgg_filtrados.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 def main():
-    st.set_page_config(page_title="Dashboard APPGG", layout="wide")
+    st.set_page_config(page_title="Dashboard APPGG - Perda Inflacionária", layout="wide")
     
     df_raw = load_data()
-    
     sidebar_factory()
     df_filtrado = header_factory(df_raw)
     
     if not df_filtrado.empty:
-        metrics_factory(df_filtrado)
-        charts_factory(df_filtrado)
-        individual_analysis_factory(df_raw)
+        df_individuo, nome_servidor = individual_selector_factory(df_filtrado)
+        dashboard_columns_factory(df_filtrado, df_individuo, nome_servidor)
+        data_download_factory(df_filtrado)
     else:
-        st.warning("Nenhum dado encontrado para os filtros selecionados.")
+        st.warning("Nenhum dado encontrado para o intervalo selecionado.")
 
 if __name__ == "__main__":
     main()
